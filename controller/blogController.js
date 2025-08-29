@@ -48,8 +48,19 @@ export const togglePublish = async(req,res)=>{
 export const addComment = async(req,res)=>{
     try{
         const {blog,name,content}=req.body;
-        await 
+        await Comment.create({blog,name,content});
+        res.json({success:true,message:"Comment added for review"}) 
     } catch (error){
         res.json({success:false,message:error.massage})
     }
+}
+
+export const getBlogComments = async (req, res) => {
+  try {
+    const { blogId } = req.body;
+    const comments = await Comment.find({ blog: blogId, isApproved: true }).sort({ createdAt: -1 });
+    res.json({ success: true, comments });
+  } catch (error) {
+    res.json({ success: false, message: error.message });
+  }
 }
