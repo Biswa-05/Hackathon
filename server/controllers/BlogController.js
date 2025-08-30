@@ -1,38 +1,114 @@
-import cloudinary from "../configs/cloudinary.js";
+import imagekit from "server\configs\imagekit.js";
+import imagekit from "../configs/imagekit.js";
 import Blog from "../models/blog.js";
+import fs from 'fs'
 
 export const addBlog = async (req, res) => {
   try {
-    const { title, subTitle, description, category, isPublished } = req.body;
-
+    const { title, subTitle, description, category, isPublished } = JSPN.parse(req.body.blog);
+    const imageFile = req.file;
     if (!title || !description || !category || !req.file) {
       return res.json({ success: false, message: "Missing required fields" });
     }
 
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: "blogs",
+    const fileBuffer = fs.readFileSync(imageFile.path)
+    //upload image to imagekit
+    const response = await imagekit.upload({
+      file:fileBuffer,
+      fileName:imageFile.originalname,
+      folder:"/blogs"
+    })
+  
+    // optimization through imagekit URL transformation
+    const optimizedImageUrl = imagekit.url({
+      path: response.filePath,
       transformation: [
-        { width: 1280, crop: "limit" },
-        { fetch_format: "webp", quality: "auto" }
+        {quality:'auto'}, //auto compression
+        {format:'webp'}, //convert to modern format 
+        {width:'1280'} // width resizing
       ]
     });
+    
 
-    // Save blog to DB
-    const blog = new Blog({
-      title,
-      subTitle,
-      description,
-      category,
-      isPublished,
-      imageUrl: result.secure_url,
-    });
+    const image = optimizedImageUrl;
 
-    await blog.save();
-
-    res.json({ success: true, blog });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Server error" });
+    await Blog.create({titile,subTitle,description,category,image,isPublished})
+    res.json({success:true,message:"Blog added successfully"})
   }
-};
+  catch(error){
+    res.json({success:false,message:error.message})
+  }
+  }
+
+  export const getAllBlogs = async (req,res) =>{
+    try{
+        const blogs = await Blog.find({isPublished: true})
+        res.json({success: true,blogs})
+    } catch (error){   
+        res.json({success: false,message: error.message})     
+    }
+}
+
+
+export const getBlogByid = async(req,res)=>{
+    try{
+        const{blogId} = req.params;
+        const blog = await Blog.findById(blogId)
+        if(!blog){
+            return res.json({success: false,message:"Blog not found"});
+        }
+        res.json({success: true,blog})
+    } catch(error){
+        res.json({success: false,message: error.message})
+    }
+}
+
+
+export const deleteBlogById = async(req,res) =>{
+    try{
+        const{id} = req.body;
+        await Blog.findByIdAndDelete(id);
+
+        //Delete all comments associated with the blog 
+        await Comment.deleteMany({blog: id});
+        
+        res.json({success: true,message:"Blog deleted successfully"})
+    } catch(error){
+        res.json({success: false,message: error.message})
+    }
+}
+
+
+export const togglePublish = async(req,res)=>{
+    try{
+        const{id} = req.body;
+        const blog = await Blog.findById(id);
+        blog.isPublished= !blog.isPublished;
+        await blog.save();
+        res.json({success:true,message:"Blog status updated"})
+    } catch (error){
+        res.json({success: false,message: error.message})
+    }
+}
+
+export const addComment = async(req,res)=>{
+    try{
+        const {blog,name,content}=req.body;
+        await Comment.create({blog,name,content});
+        res.json({success:true,message:"Comment added for review"}) 
+    } catch (error){
+        res.json({success:false,message:error.massage})
+    }
+}
+
+export const getBlogComments = async (req, res) => {
+  try {
+    const { blogId } = req.body;
+    const comments = await Comment.find({ blog: blogId, isApproved: true }).sort({ createdAt: -1 });
+    res.json({ success: true, comments });
+  } catch (error) {
+    res.json({ success: false, message: error.message });
+  }
+}
+
+    
